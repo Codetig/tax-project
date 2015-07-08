@@ -6,6 +6,7 @@ It takes in the tax year, gross income and tax-filing status from the user, and 
 
 Next Steps:
 -Refactoring
+-Converting into OOP in preparation for increased complexity and consider a different input file structure.
 -Adding more tax data 
 -Adding functionality to facor in deductions or credits.
 -Employing the GUI Swing class
