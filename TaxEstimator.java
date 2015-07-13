@@ -27,18 +27,18 @@ public class TaxEstimator{
 		System.out.println("Please type in your gross income for " + year.value() + ":");
 		double grossPay = input.nextDouble();
 		
-		System.out.println("Finally, where:\n1 => " + STATUSES[0] + "\n2 => " + 
-		STATUSES[1] + "\n3 => " + STATUSES[2] + "\n4 => " + STATUSES[3] + "\n" +
+		System.out.println("Finally, where:\n0 => " + STATUSES[0] + "\n1 => " + 
+		STATUSES[1] + "\n2 => " + STATUSES[2] + "\n3 => " + STATUSES[3] + "\n" +
 		"Type in the number that represents your filing status for " + year.value() + ":");
 		int statusInt = input.nextInt();
-		if(statusInt > 4 || statusInt < 1) {
+		if(statusInt > 3 || statusInt < 0) {
 			System.out.println("Error: Invalid status number.");
 			return;
 		}
 		
 		input.close();
 
-		Tax estimatedTax = new Tax(year, grossPay, (statusInt - 1));
+		Tax estimatedTax = new Tax(year, grossPay, statusInt);
 
 		System.out.printf("Your potential tax payment (excluding deductions) is $%5.2f" +
 		"\nand your effective tax rate is %2.2f percent", estimatedTax.getMaxTax(), estimatedTax.getEffectiveRate());
@@ -48,7 +48,7 @@ public class TaxEstimator{
 class Tax implements Comparable<Tax>{
 	private String status;
 	private int statusInt;
-	private double grossPay, maxTax = 0;
+	private double grossPay, maxTax;
 	private TaxYear year;
 
 	//construtor
@@ -57,6 +57,7 @@ class Tax implements Comparable<Tax>{
 		this.grossPay = grossPay;
 		this.status = TaxEstimator.STATUSES[statusInt];
 		this.statusInt = statusInt;
+		maxTax = 0;
 	}
 
 	//impelement compareTo using maxtax value
@@ -89,42 +90,46 @@ class Tax implements Comparable<Tax>{
 
 	//tax calculation methods
 	public double getMaxTax(){
-		if(grossPay <= 0)
-			return 0;
-		if(maxTax > 0)
+		if(grossPay <= 0 || maxTax > 0)
 			return maxTax;
 
 		double result = 0.0;
 		double[] rates;
-
-		if(statusInt == 1)
+		System.out.println(statusInt);
+		if(statusInt == 0)
 			rates = year.single();
-		else if(statusInt == 2)
+		else if(statusInt == 1)
 			rates = year.marriedJ();
-		else if(statusInt == 3)
+		else if(statusInt == 2)
 			rates = year.head();
-		else
+		else if(statusInt == 3)
 			rates = year.marriedS();
-
-		if(grossPay <= rates[0]){
-				return grossPay * rates[1];
+		else {
+			System.out.println("Invalid status");
+			return 0.0;
 		}
 
-		for(int i = rates.length - 2; i >= 0; i -= 2){
-			if(grossPay >= rates[i]){
-				if(i == rates.length - 2){
-					result += (grossPay + 0.01 - rates[i]) * rates[i + 1];
-				} else {
-					result += i < 2 ? rates[i] * rates[i + 1] : (rates[i] - rates[i -2]) * rates[i+1];
-				}
-			} else if (grossPay > rates[i - 2]) {
+		if(grossPay <= rates[0]){
+				return maxTax = grossPay * rates[1];
+		}
+
+		for(int i = 0; i < rates.length - 1; i += 2){
+			if (rates[i] >= grossPay && i != rates.length - 2) {
 				result += (grossPay - rates[i - 2]) * rates[i + 1];
+				break;
 			}
+			if (i == rates.length - 2)
+				result += (grossPay + 0.01 - rates[i]) * rates[i + 1];
+			
+			double amt = i != 0 ? (rates[i] - rates[i - 2]) : rates[i];
+			result += amt * rates[i + 1];
+
 		}
 		maxTax = result;
 		return result;
 	}
 
+	//This effective rate depends on max tax.
 	public double getEffectiveRate(){
 		return (getMaxTax() * 100) / grossPay;
 	}
@@ -145,44 +150,53 @@ class TaxYear implements Comparable<TaxYear> {
 		setYear();
 	}
 
+	//Setting up the years states more concretely
 	private void setYear() throws Exception {
 		String strYear = "year " + year;
 		File file = new File("taxrate.txt");
 		Scanner input1 = new Scanner(file);
-
+		String placeholder = "";
 		while(input1.hasNextLine()){
-			if(strYear.equalsIgnoreCase(input1.nextLine())) {
+			placeholder = input1.nextLine();
+			if(placeholder.contains(strYear)) {
 				yearFound = true;
-				break;
-			}
-		}
-
-		if(yearFound) {
-			String placeholder = input1.nextLine();
-			while (marriedS.size() < 1) { //marriedS is the last category in my file
-				if(placeholder.equalsIgnoreCase("Single"))
-					fillList(single, input1.nextLine());
-				else if(placeholder.equalsIgnoreCase("Married Filing Jointly or Surviving Spouse"))
-					fillList(marriedJ, input1.nextLine());
-				else if(placeholder.equalsIgnoreCase("Head of Household"))
-					fillList(marriedJ, input1.nextLine());
-				else if(placeholder.equalsIgnoreCase("Married Filing Separately"))
-					fillList(marriedS, input1.nextLine());
-				else
-					continue;
 				placeholder = input1.nextLine();
 			}
+				if (yearFound) {
+					ArrayList<Double> statusList;
+					if(placeholder.contains("Single"))
+						statusList = single;
+					else if (placeholder.contains("Jointly"))
+						statusList = marriedJ;
+					else if (placeholder.contains("Head"))
+						statusList = head;
+					else if (placeholder.contains("Separately"))
+						statusList = marriedS;
+					else
+						break;
+					placeholder = input1.nextLine();
+					fillList(statusList, placeholder);
+				}
 		}
 		input1.close();
 	}
 
-	private void fillList(ArrayList<Double> list, String rates){
+	/**
+	*Fills the corresponding status array list with the rates from the file
+	*/
+	private void fillList(ArrayList<Double> statusList, String rates){
+			//This order is based on how the scanner reads the file
 			Scanner line = new Scanner(rates);
+			
 			while(line.hasNext())
-				list.add(line.nextDouble());
+				statusList.add(line.nextDouble());
 			line.close();
 	}
 
+	/**
+	*converts the array list of doubles to an array.
+	*The toArray method of Arraylist will not work because due to Double objects
+	*/
 	private double[] toArray(ArrayList<Double> list){
 		double[] result = new double[list.size()];
 		for(int i = 0; i < result.length; i++) {
@@ -201,7 +215,7 @@ class TaxYear implements Comparable<TaxYear> {
 		return Integer.parseInt(year);
 	}
 
-	//implementing compareTo
+	//implementing compareTo for sorting in future
 	@Override
 	public int compareTo(TaxYear o){
 		if(value() > o.value())
@@ -224,5 +238,4 @@ class TaxYear implements Comparable<TaxYear> {
 	public double[] marriedS() {
 		return toArray(marriedS);
 	}
-
 }
